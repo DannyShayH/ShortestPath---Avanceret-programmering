@@ -1,0 +1,992 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A* – trin for trin</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --panel: rgba(15, 29, 48, 0.94);
+      --panel-2: #13243a;
+      --border: #2b405b;
+      --text: #f5f8fc;
+      --muted: #a9bad0;
+      --open: #20334b;
+      --wall: #050a11;
+      --frontier: #f6c453;
+      --current: #ff8a4c;
+      --visited: #37c995;
+      --path: #bd8cff;
+      --focus: #8ec5ff;
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 0%, rgba(66, 120, 168, 0.22), transparent 34rem),
+        radial-gradient(circle at 95% 45%, rgba(104, 70, 170, 0.16), transparent 30rem),
+        var(--bg);
+    }
+
+    button, select { font: inherit; }
+
+    .page {
+      width: min(1560px, 100%);
+      margin: 0 auto;
+      padding: 30px clamp(14px, 3vw, 42px) 44px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 24px;
+      margin-bottom: 20px;
+    }
+
+    .eyebrow {
+      margin: 0 0 7px;
+      color: var(--focus);
+      font-size: 0.76rem;
+      font-weight: 850;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 3.8rem);
+      line-height: 1.04;
+      letter-spacing: -0.045em;
+    }
+
+    .lead {
+      max-width: 820px;
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: clamp(0.98rem, 1.3vw, 1.12rem);
+      line-height: 1.6;
+    }
+
+    .formula {
+      padding: 14px 18px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(14, 29, 48, 0.78);
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .formula strong { color: var(--text); font-size: 1.15rem; }
+
+    .learning-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .learning-card {
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      background: rgba(14, 29, 48, 0.68);
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .learning-card strong { color: var(--text); }
+    .learning-card b { color: var(--focus); }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.7fr) minmax(330px, 0.7fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .panel {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 9px;
+      padding: 13px 15px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(8, 20, 35, 0.72);
+    }
+
+    .route-picker {
+      display: flex;
+      align-items: end;
+      justify-content: center;
+      gap: 12px;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+      background: #0d1d31;
+    }
+
+    .route-field {
+      display: grid;
+      gap: 5px;
+      min-width: min(250px, 38%);
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 800;
+    }
+
+    .route-field select { width: 100%; }
+
+    .route-arrow {
+      display: grid;
+      place-items: center;
+      min-height: 39px;
+      color: var(--focus);
+      font-size: 1.35rem;
+      font-weight: 900;
+    }
+
+    .button {
+      min-height: 41px;
+      padding: 0 15px;
+      border: 1px solid #49627f;
+      border-radius: 10px;
+      color: var(--text);
+      background: #1a304b;
+      cursor: pointer;
+      font-weight: 750;
+      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+    }
+
+    .button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      border-color: var(--focus);
+      background: #203b5c;
+    }
+
+    .button:focus-visible, select:focus-visible {
+      outline: 3px solid rgba(142, 197, 255, 0.42);
+      outline-offset: 2px;
+    }
+
+    .button.primary { color: #07111f; border-color: var(--focus); background: var(--focus); }
+    .button.stop { border-color: #9b5d4f; background: #4b2927; }
+    .button:disabled { opacity: 0.42; cursor: not-allowed; }
+
+    .speed-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-weight: 750;
+    }
+
+    select {
+      min-height: 39px;
+      padding: 0 30px 0 10px;
+      border: 1px solid #49627f;
+      border-radius: 9px;
+      color: var(--text);
+      background: #142942;
+    }
+
+    .status-banner {
+      min-height: 100px;
+      padding: 15px 19px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(100deg, rgba(142, 197, 255, 0.11), transparent 70%);
+    }
+
+    .status-kicker {
+      margin-bottom: 5px;
+      color: var(--focus);
+      font-size: 0.73rem;
+      font-weight: 850;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .status-title { margin: 0 0 4px; font-size: clamp(1.05rem, 2vw, 1.3rem); }
+    .status-copy { margin: 0; color: var(--muted); line-height: 1.48; }
+
+    .board-scroll {
+      overflow: auto;
+      padding: 18px;
+      background: #091625;
+    }
+
+    .grid-board {
+      display: grid;
+      grid-template-columns: 34px repeat(12, minmax(56px, 1fr));
+      grid-template-rows: 28px repeat(12, minmax(56px, 1fr));
+      gap: 3px;
+      width: 100%;
+      min-width: 760px;
+      aspect-ratio: 1 / 1;
+      min-height: 760px;
+    }
+
+    .axis-label {
+      display: grid;
+      place-items: center;
+      color: #7890ad;
+      font-size: 0.72rem;
+      font-weight: 800;
+    }
+
+    .grid-corner {
+      color: #526982;
+      font-size: 0.62rem;
+    }
+
+    .cell {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      min-height: 0;
+      gap: 4px;
+      padding: 5px 3px;
+      border: 1px solid #38516e;
+      border-radius: 7px;
+      background: var(--open);
+      overflow: hidden;
+      transition: background 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+    }
+
+    .cell.wall {
+      border-color: #182333;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,0.035) 25%, transparent 25%) 0 0 / 12px 12px,
+        linear-gradient(315deg, rgba(255,255,255,0.025) 25%, transparent 25%) 0 0 / 12px 12px,
+        var(--wall);
+    }
+
+    .cell.frontier {
+      border-color: var(--frontier);
+      background: #43381d;
+      box-shadow: inset 0 0 0 2px rgba(246, 196, 83, 0.12);
+    }
+
+    .cell.visited {
+      border-color: var(--visited);
+      background: #15382f;
+    }
+
+    .cell.current {
+      z-index: 3;
+      border-color: var(--current);
+      background: #4a2b24;
+      box-shadow: 0 0 0 3px rgba(255, 138, 76, 0.22), 0 0 20px rgba(255, 138, 76, 0.28);
+      transform: scale(1.06);
+    }
+
+    .cell.inspecting {
+      border-color: #65d6ff;
+      background: #173b4a;
+      box-shadow: inset 0 0 0 2px rgba(101, 214, 255, 0.16);
+    }
+
+    .cell.path {
+      z-index: 2;
+      border-color: var(--path);
+      background: #3b2858;
+      box-shadow: inset 0 0 0 2px rgba(189, 140, 255, 0.2);
+    }
+
+    .city-name {
+      max-width: 100%;
+      color: #fff;
+      font-size: clamp(0.48rem, 0.72vw, 0.68rem);
+      font-weight: 900;
+      line-height: 1.04;
+      text-align: center;
+      overflow-wrap: anywhere;
+      text-shadow: 0 1px 2px #000;
+    }
+
+    .cell-total {
+      color: #fff;
+      font-size: clamp(0.58rem, 0.86vw, 0.78rem);
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 15px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      background: #0b1a2c;
+      font-size: 0.78rem;
+    }
+
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .swatch { width: 12px; height: 12px; border: 2px solid currentColor; border-radius: 3px; }
+    .swatch.open { color: #516c8c; background: var(--open); }
+    .swatch.wall { color: #28384d; background: var(--wall); }
+    .swatch.frontier { color: var(--frontier); background: #43381d; }
+    .swatch.current { color: var(--current); background: #4a2b24; }
+    .swatch.visited { color: var(--visited); background: #15382f; }
+    .swatch.path { color: var(--path); background: #3b2858; }
+
+    .data-panel {
+      display: grid;
+      grid-template-rows: auto auto auto minmax(230px, 1fr);
+      min-height: 0;
+    }
+
+    .data-section { padding: 13px 14px; border-bottom: 1px solid var(--border); }
+    .section-heading { display: flex; justify-content: space-between; gap: 10px; margin: 0 0 8px; font-size: 0.9rem; }
+    .section-heading small { color: var(--muted); font-weight: 600; }
+
+    .calculation-card {
+      padding: 10px;
+      border: 1px solid #3f5875;
+      border-radius: 10px;
+      background: #0d2035;
+    }
+
+    .calculation-location {
+      margin-bottom: 8px;
+      color: var(--focus);
+      font-size: 0.77rem;
+      font-weight: 850;
+    }
+
+    .calculation-values {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .calculation-value {
+      padding: 6px 4px;
+      border-radius: 7px;
+      color: var(--muted);
+      background: #172d47;
+      font-size: 0.67rem;
+      text-align: center;
+    }
+
+    .calculation-value strong { display: block; margin-top: 1px; color: var(--text); font-size: 0.94rem; }
+    .calculation-equation { color: var(--text); font-size: 0.94rem; font-weight: 900; text-align: center; }
+
+    .queue-list { display: grid; gap: 6px; max-height: 245px; overflow-y: auto; }
+    .queue-item {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border: 1px solid #504932;
+      border-radius: 8px;
+      background: #302b1c;
+      font-size: 0.79rem;
+    }
+
+    .queue-rank { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: #171203; background: var(--frontier); font-weight: 900; }
+    .queue-cost { grid-column: 2; color: var(--frontier); font-size: 0.72rem; font-weight: 850; }
+
+    .visited-list { display: flex; flex-wrap: wrap; gap: 5px; max-height: 105px; overflow-y: auto; }
+    .visited-chip { padding: 4px 7px; border: 1px solid rgba(55, 201, 149, 0.44); border-radius: 999px; color: #9bf0cf; background: rgba(55, 201, 149, 0.1); font-size: 0.68rem; font-weight: 750; }
+    .empty-state { color: var(--muted); font-size: 0.82rem; font-style: italic; }
+
+    .log-section { display: flex; flex-direction: column; min-height: 0; padding: 13px 14px; }
+    .event-log { flex: 1; min-height: 260px; max-height: 500px; margin: 0; padding: 5px 3px 5px 0; overflow-y: auto; list-style: none; }
+    .event-log li { position: relative; margin-left: 14px; padding: 0 0 11px 16px; border-left: 1px solid #38506d; color: var(--muted); font-size: 0.79rem; line-height: 1.42; }
+    .event-log li::before { content: ""; position: absolute; top: 4px; left: -4px; width: 7px; height: 7px; border-radius: 50%; background: #607b9b; }
+    .event-log li:last-child { color: var(--text); border-left-color: transparent; }
+    .event-log li:last-child::before { background: var(--current); box-shadow: 0 0 0 3px rgba(255, 138, 76, 0.15); }
+
+    .result-card { display: none; margin-top: 10px; padding: 11px; border: 1px solid rgba(189, 140, 255, 0.55); border-radius: 10px; background: rgba(189, 140, 255, 0.1); color: var(--muted); line-height: 1.45; font-size: 0.84rem; }
+    .result-card.visible { display: block; }
+    .result-card strong { color: #dbc1ff; }
+
+    @media (max-width: 1120px) {
+      header { grid-template-columns: 1fr; }
+      .workspace { grid-template-columns: 1fr; }
+      .data-panel { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; }
+      .log-section { grid-column: 1 / -1; }
+      .event-log { max-height: 300px; }
+    }
+
+    @media (max-width: 700px) {
+      .page { padding-inline: 10px; }
+      .learning-strip { grid-template-columns: 1fr; }
+      .route-picker { align-items: stretch; gap: 7px; }
+      .route-field { min-width: 0; flex: 1; }
+      .route-arrow { min-height: auto; align-self: end; padding-bottom: 8px; }
+      .button { flex: 1 1 calc(50% - 7px); }
+      .speed-control { width: 100%; margin-left: 0; justify-content: space-between; }
+      .data-panel { grid-template-columns: 1fr; }
+      .log-section { grid-column: auto; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <div>
+        <p class="eyebrow">A* · interaktiv visualisering</p>
+        <h1>Find vej gennem byen med A*</h1>
+        <p class="lead">Se hvordan A* kombinerer den afstand, vi allerede har gået, med et skøn over afstanden til målet. Mørke felter er vægge og kan ikke passeres.</p>
+      </div>
+      <aside class="formula"><strong>f = g + h</strong><br><b>g</b>: gået afstand · <b>h</b>: skøn til målet</aside>
+    </header>
+
+    <section class="learning-strip" aria-label="A-stjernes tre grundtrin">
+      <div class="learning-card"><b>1.</b> Vælg feltet med den <strong>laveste f-værdi</strong>.</div>
+      <div class="learning-card"><b>2.</b> Undersøg de åbne <strong>nabofelter</strong>.</div>
+      <div class="learning-card"><b>3.</b> Opdater <strong>g, h og f</strong>, hvis vejen er bedre.</div>
+    </section>
+
+    <section class="workspace">
+      <div class="panel">
+        <div class="route-picker" aria-label="Vælg startby og slutby">
+          <label class="route-field" for="sourceSelect">Startby
+            <select id="sourceSelect"></select>
+          </label>
+          <span class="route-arrow" aria-hidden="true">→</span>
+          <label class="route-field" for="destinationSelect">Slutby
+            <select id="destinationSelect"></select>
+          </label>
+        </div>
+        <div class="controls" aria-label="Afspilningsknapper">
+          <button class="button primary" id="startButton" type="button">▶ Start</button>
+          <button class="button stop" id="stopButton" type="button" disabled>■ Stop</button>
+          <button class="button" id="stepButton" type="button">Næste trin →</button>
+          <button class="button" id="resetButton" type="button">↺ Nulstil</button>
+          <label class="speed-control" for="speedSelect">Hastighed
+            <select id="speedSelect">
+              <option value="650">Langsom</option>
+              <option value="300" selected>Normal</option>
+              <option value="100">Hurtig</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="status-banner" aria-live="polite" aria-atomic="true">
+          <div class="status-kicker" id="stepCounter">Klar</div>
+          <h2 class="status-title" id="statusTitle">Start i Helsinge</h2>
+          <p class="status-copy" id="statusCopy">Startfeltet (0,0) har g = 0. Manhattan-afstanden til Nørreport er h = 22.</p>
+        </div>
+
+        <div class="board-scroll">
+          <div class="grid-board" id="gridBoard" aria-label="12 gange 12 A-stjerne-gitter"></div>
+        </div>
+
+        <div class="legend" aria-label="Farveforklaring">
+          <span class="legend-item"><i class="swatch open"></i>Ikke undersøgt</span>
+          <span class="legend-item"><i class="swatch wall"></i>Væg</span>
+          <span class="legend-item"><i class="swatch frontier"></i>Åben liste</span>
+          <span class="legend-item"><i class="swatch current"></i>Undersøges nu</span>
+          <span class="legend-item"><i class="swatch visited"></i>Besøgt</span>
+          <span class="legend-item"><i class="swatch path"></i>Korteste vej</span>
+        </div>
+      </div>
+
+      <aside class="panel data-panel">
+        <section class="data-section">
+          <h2 class="section-heading">Aktuel beregning <small>g + h = f</small></h2>
+          <div class="calculation-card" id="calculationCard"></div>
+        </section>
+        <section class="data-section">
+          <h2 class="section-heading">Åben liste <small>laveste f først</small></h2>
+          <div class="queue-list" id="queueList"></div>
+        </section>
+        <section class="data-section">
+          <h2 class="section-heading">Besøgte felter <small>lukket liste</small></h2>
+          <div class="visited-list" id="visitedList"></div>
+        </section>
+        <section class="log-section">
+          <h2 class="section-heading">Hvad sker der? <small>print-log</small></h2>
+          <ol class="event-log" id="eventLog" aria-live="polite"></ol>
+          <div class="result-card" id="resultCard"></div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    "use strict";
+
+    const grid = [
+      [0,0,0,1,0,0,0,1,0,0,0,0],
+      [1,1,0,1,0,1,0,1,0,1,1,0],
+      [0,0,0,0,0,1,0,0,0,0,1,0],
+      [0,1,1,1,1,1,1,1,1,1,1,0],
+      [0,0,0,0,0,0,0,0,1,0,0,0],
+      [1,1,1,0,1,1,1,0,1,1,0,0],
+      [0,0,0,0,0,0,1,0,0,0,0,0],
+      [0,1,1,1,1,1,0,1,1,1,1,0],
+      [0,0,0,0,1,0,0,0,0,0,1,0],
+      [1,1,0,1,1,0,1,1,0,1,1,0],
+      [0,0,0,0,0,0,1,0,0,0,1,0],
+      [0,1,1,1,0,1,1,0,1,1,1,0]
+    ];
+
+    const cityNames = {
+      "0,0": "Helsinge",
+      "0,2": "Duemose",
+      "3,0": "Gribsø",
+      "4,3": "Slotspavillionen",
+      "4,7": "Hillerød",
+      "6,9": "Favrholm",
+      "7,11": "Birkerød",
+      "11,11": "Nørreport"
+    };
+
+    const ROWS = 12;
+    const COLUMNS = 12;
+    let sourceKey = "0,0";
+    let destinationKey = "11,11";
+    const directions = [[-1,0],[1,0],[0,-1],[0,1]];
+    const keyOf = (row, column) => `${row},${column}`;
+    const coordinatesOf = key => key.split(",").map(Number);
+    const displayName = key => cityNames[key] ? `${cityNames[key]} (${key})` : `(${key})`;
+
+    const gridBoard = document.getElementById("gridBoard");
+    const sourceSelect = document.getElementById("sourceSelect");
+    const destinationSelect = document.getElementById("destinationSelect");
+    const startButton = document.getElementById("startButton");
+    const stopButton = document.getElementById("stopButton");
+    const stepButton = document.getElementById("stepButton");
+    const resetButton = document.getElementById("resetButton");
+    const speedSelect = document.getElementById("speedSelect");
+    const statusTitle = document.getElementById("statusTitle");
+    const statusCopy = document.getElementById("statusCopy");
+    const stepCounter = document.getElementById("stepCounter");
+    const calculationCard = document.getElementById("calculationCard");
+    const queueList = document.getElementById("queueList");
+    const visitedList = document.getElementById("visitedList");
+    const eventLog = document.getElementById("eventLog");
+    const resultCard = document.getElementById("resultCard");
+    const cellElements = new Map();
+
+    function heuristic(key) {
+      const [row, column] = coordinatesOf(key);
+      const [goalRow, goalColumn] = coordinatesOf(destinationKey);
+      return Math.abs(goalRow - row) + Math.abs(goalColumn - column);
+    }
+
+    function openNeighbors(key) {
+      const [row, column] = coordinatesOf(key);
+      return directions
+        .map(([rowChange, columnChange]) => [row + rowChange, column + columnChange])
+        .filter(([nextRow, nextColumn]) =>
+          nextRow >= 0 && nextRow < ROWS
+          && nextColumn >= 0 && nextColumn < COLUMNS
+          && grid[nextRow][nextColumn] === 0
+        )
+        .map(([nextRow, nextColumn]) => keyOf(nextRow, nextColumn));
+    }
+
+    function buildGrid() {
+      const corner = document.createElement("div");
+      corner.className = "axis-label grid-corner";
+      corner.textContent = "r/c";
+      gridBoard.appendChild(corner);
+
+      for (let column = 0; column < COLUMNS; column += 1) {
+        const label = document.createElement("div");
+        label.className = "axis-label";
+        label.textContent = column;
+        gridBoard.appendChild(label);
+      }
+
+      for (let row = 0; row < ROWS; row += 1) {
+        const rowLabel = document.createElement("div");
+        rowLabel.className = "axis-label";
+        rowLabel.textContent = row;
+        gridBoard.appendChild(rowLabel);
+
+        for (let column = 0; column < COLUMNS; column += 1) {
+          const key = keyOf(row, column);
+          const cell = document.createElement("div");
+          const isWall = grid[row][column] === 1;
+          cell.className = `cell${isWall ? " wall" : ""}`;
+          cell.dataset.key = key;
+          cell.classList.toggle("start", key === sourceKey);
+          cell.classList.toggle("goal", key === destinationKey);
+          cell.setAttribute("role", "gridcell");
+          cell.setAttribute("aria-label", isWall ? `Væg ved ${key}` : displayName(key));
+          cell.title = isWall ? `Væg (${key})` : displayName(key);
+          cell.innerHTML = isWall ? "" : `
+            ${cityNames[key] ? `<strong class="city-name">${cityNames[key]}</strong>` : ""}
+            <span class="cell-total"></span>
+          `;
+          gridBoard.appendChild(cell);
+          cellElements.set(key, cell);
+        }
+      }
+    }
+
+    function populateCitySelectors() {
+      for (const [key, name] of Object.entries(cityNames)) {
+        const sourceOption = document.createElement("option");
+        sourceOption.value = key;
+        sourceOption.textContent = `${name} (${key})`;
+        sourceSelect.appendChild(sourceOption);
+
+        const destinationOption = sourceOption.cloneNode(true);
+        destinationSelect.appendChild(destinationOption);
+      }
+      sourceSelect.value = sourceKey;
+      destinationSelect.value = destinationKey;
+    }
+
+    function updateEndpointClasses() {
+      for (const [key, cell] of cellElements) {
+        cell.classList.toggle("start", key === sourceKey);
+        cell.classList.toggle("goal", key === destinationKey);
+      }
+    }
+
+    function buildTimeline() {
+      const timeline = [];
+      const sourceName = cityNames[sourceKey];
+      const destinationName = cityNames[destinationKey];
+      const startingHeuristic = heuristic(sourceKey);
+      const gCosts = { [sourceKey]: 0 };
+      const previous = {};
+      const visited = [];
+      const visitedSet = new Set();
+      const queue = [];
+      const logs = [];
+      let sequence = 0;
+
+      function sortedQueue() {
+        return [...queue].sort((a, b) => a.f - b.f || a.sequence - b.sequence);
+      }
+
+      function addOrImproveQueue(key, g) {
+        const oldIndex = queue.findIndex(item => item.key === key);
+        if (oldIndex !== -1) queue.splice(oldIndex, 1);
+        const h = heuristic(key);
+        queue.push({ key, g, h, f: g + h, sequence: sequence++ });
+      }
+
+      function addStep(title, copy, options = {}) {
+        if (options.log) logs.push(options.log);
+        timeline.push({
+          title,
+          copy,
+          gCosts: { ...gCosts },
+          previous: { ...previous },
+          visited: [...visited],
+          queue: sortedQueue(),
+          logs: [...logs],
+          currentKey: options.currentKey || null,
+          inspectingKey: options.inspectingKey || null,
+          calculation: options.calculation || null,
+          finalPath: options.finalPath || null,
+          complete: Boolean(options.complete),
+          noRoute: Boolean(options.noRoute)
+        });
+      }
+
+      addOrImproveQueue(sourceKey, 0);
+      addStep(
+        `Start i ${sourceName}`,
+        `Startfeltet ${displayName(sourceKey)} har g = 0. Manhattan-afstanden til ${destinationName} er h = ${startingHeuristic}, så f = ${startingHeuristic}.`,
+        {
+          calculation: { key: sourceKey, g: 0, h: startingHeuristic, f: startingHeuristic },
+          log: `${displayName(sourceKey)} lægges i den åbne liste med g=0, h=${startingHeuristic} og f=${startingHeuristic}.`
+        }
+      );
+
+      let reachedGoal = false;
+      while (queue.length > 0) {
+        queue.sort((a, b) => a.f - b.f || a.sequence - b.sequence);
+        const current = queue.shift();
+        if (visitedSet.has(current.key)) continue;
+
+        addStep(
+          `Vælg ${displayName(current.key)}`,
+          `Dette felt har den laveste f-værdi i den åbne liste: ${current.g} + ${current.h} = ${current.f}.`,
+          {
+            currentKey: current.key,
+            calculation: { key: current.key, g: current.g, h: current.h, f: current.f },
+            log: `${displayName(current.key)} vælges med f=${current.f}.`
+          }
+        );
+
+        if (current.key === destinationKey) {
+          reachedGoal = true;
+          break;
+        }
+
+        visitedSet.add(current.key);
+        visited.push(current.key);
+        addStep(
+          `${displayName(current.key)} er besøgt`,
+          "Feltet flyttes til den lukkede liste. Dets åbne naboer undersøges nu.",
+          {
+            calculation: { key: current.key, g: current.g, h: current.h, f: current.f },
+            log: `${displayName(current.key)} markeres som besøgt.`
+          }
+        );
+
+        for (const nextKey of openNeighbors(current.key)) {
+          if (visitedSet.has(nextKey)) continue;
+          const candidateG = current.g + 1;
+          const nextH = heuristic(nextKey);
+
+          addStep(
+            `Undersøg ${displayName(nextKey)}`,
+            `Et skridt fra ${displayName(current.key)} giver g=${candidateG}. Herfra er h=${nextH}, så f=${candidateG + nextH}.`,
+            {
+              currentKey: current.key,
+              inspectingKey: nextKey,
+              calculation: { key: nextKey, g: candidateG, h: nextH, f: candidateG + nextH },
+              log: `${displayName(nextKey)} undersøges: g=${candidateG}, h=${nextH}, f=${candidateG + nextH}.`
+            }
+          );
+
+          if (candidateG < (gCosts[nextKey] ?? Infinity)) {
+            const oldCost = gCosts[nextKey];
+            gCosts[nextKey] = candidateG;
+            previous[nextKey] = current.key;
+            addOrImproveQueue(nextKey, candidateG);
+            addStep(
+              `Gem en bedre vej til ${displayName(nextKey)}`,
+              `${Number.isFinite(oldCost) ? `${candidateG} er bedre end ${oldCost}` : "Feltet er fundet for første gang"}. Det lægges i den åbne liste.`,
+              {
+                currentKey: current.key,
+                inspectingKey: nextKey,
+                calculation: { key: nextKey, g: candidateG, h: nextH, f: candidateG + nextH },
+                log: `${displayName(nextKey)} gemmes med g=${candidateG} og forgænger ${displayName(current.key)}.`
+              }
+            );
+          } else {
+            addStep(
+              `Behold den kendte vej til ${displayName(nextKey)}`,
+              `Den nye g-værdi ${candidateG} er ikke bedre end ${gCosts[nextKey]}, så intet ændres.`,
+              {
+                currentKey: current.key,
+                inspectingKey: nextKey,
+                calculation: { key: nextKey, g: candidateG, h: nextH, f: candidateG + nextH },
+                log: `Vejen til ${displayName(nextKey)} blev ikke forbedret.`
+              }
+            );
+          }
+        }
+      }
+
+      if (!reachedGoal) {
+        addStep(
+          "Ingen vej blev fundet",
+          `Den åbne liste er tom, før ${destinationName} blev nået.`,
+          {
+            noRoute: true,
+            complete: true,
+            log: `Ingen sammenhængende vej findes fra ${sourceName} til ${destinationName}.`
+          }
+        );
+        return timeline;
+      }
+
+      const finalPath = [];
+      let cursor = destinationKey;
+      while (cursor) {
+        finalPath.unshift(cursor);
+        cursor = previous[cursor];
+      }
+      const namedRoute = finalPath.filter(key => cityNames[key]).map(key => cityNames[key]).join(" → ");
+      addStep(
+        "Den korteste vej er fundet!",
+        `A* nåede ${destinationName} fra ${sourceName} efter ${gCosts[destinationKey]} skridt. Den lilla rute viser hele vejen.`,
+        {
+          finalPath,
+          complete: true,
+          calculation: {
+            key: destinationKey,
+            g: gCosts[destinationKey],
+            h: heuristic(destinationKey),
+            f: gCosts[destinationKey] + heuristic(destinationKey)
+          },
+          log: `Korteste vej: ${namedRoute}. Samlet distance: ${gCosts[destinationKey]}.`
+        }
+      );
+
+      return timeline;
+    }
+
+    function render(step) {
+      statusTitle.textContent = step.title;
+      statusCopy.textContent = step.copy;
+      stepCounter.textContent = step.complete ? "Færdig" : `Trin ${currentStep + 1} af ${timeline.length}`;
+
+      const visitedSet = new Set(step.visited);
+      const frontierSet = new Set(step.queue.map(item => item.key));
+      const pathSet = new Set(step.finalPath || []);
+
+      for (const [key, cell] of cellElements) {
+        if (cell.classList.contains("wall")) continue;
+        cell.classList.toggle("frontier", frontierSet.has(key));
+        cell.classList.toggle("visited", visitedSet.has(key));
+        cell.classList.toggle("current", step.currentKey === key);
+        cell.classList.toggle("inspecting", step.inspectingKey === key);
+        cell.classList.toggle("path", pathSet.has(key));
+        const total = cell.querySelector(".cell-total");
+        const g = step.gCosts[key];
+        total.textContent = Number.isFinite(g) ? `f = ${g + heuristic(key)}` : "";
+      }
+
+      if (step.calculation) {
+        const { key, g, h, f } = step.calculation;
+        calculationCard.innerHTML = `
+          <div class="calculation-location">${displayName(key)}</div>
+          <div class="calculation-values">
+            <div class="calculation-value">gået afstand<strong>g = ${g}</strong></div>
+            <div class="calculation-value">skøn til mål<strong>h = ${h}</strong></div>
+            <div class="calculation-value">samlet score<strong>f = ${f}</strong></div>
+          </div>
+          <div class="calculation-equation">${g} + ${h} = ${f}</div>
+        `;
+      } else {
+        calculationCard.innerHTML = '<div class="empty-state">Ingen aktiv beregning.</div>';
+      }
+
+      queueList.innerHTML = step.queue.length === 0
+        ? '<div class="empty-state">Den åbne liste er tom.</div>'
+        : step.queue.slice(0, 14).map((item, index) => `
+            <div class="queue-item">
+              <span class="queue-rank">${index + 1}</span>
+              <strong>${displayName(item.key)}</strong>
+              <span class="queue-cost">g=${item.g} + h=${item.h} = f=${item.f}</span>
+            </div>
+          `).join("") + (step.queue.length > 14 ? `<div class="empty-state">+ ${step.queue.length - 14} flere felter</div>` : "");
+
+      visitedList.innerHTML = step.visited.length === 0
+        ? '<span class="empty-state">Ingen felter er besøgt endnu.</span>'
+        : step.visited.map(key => `<span class="visited-chip">${key}</span>`).join("");
+
+      eventLog.innerHTML = step.logs.map(log => `<li>${log}</li>`).join("");
+      eventLog.scrollTop = eventLog.scrollHeight;
+
+      if (step.complete) {
+        if (step.noRoute) {
+          resultCard.innerHTML = `<strong>Ingen rute</strong><br>${cityNames[destinationKey]} kunne ikke nås fra ${cityNames[sourceKey]}.`;
+        } else {
+          const namedRoute = step.finalPath.filter(key => cityNames[key]).map(key => cityNames[key]).join(" → ");
+          resultCard.innerHTML = `<strong>Distance: ${step.gCosts[destinationKey]}</strong><br>${namedRoute}`;
+        }
+        resultCard.classList.add("visible");
+      } else {
+        resultCard.classList.remove("visible");
+        resultCard.innerHTML = "";
+      }
+
+      updateControls();
+    }
+
+    let timeline;
+    let currentStep = 0;
+    let timerId = null;
+    let isPlaying = false;
+
+    function updateControls() {
+      const complete = currentStep >= timeline.length - 1;
+      startButton.disabled = isPlaying || complete;
+      stopButton.disabled = !isPlaying;
+      stepButton.disabled = isPlaying || complete;
+      resetButton.disabled = currentStep === 0 && !isPlaying;
+    }
+
+    function scheduleNext() {
+      if (!isPlaying) return;
+      timerId = window.setTimeout(() => {
+        if (currentStep < timeline.length - 1) {
+          currentStep += 1;
+          render(timeline[currentStep]);
+        }
+        if (currentStep >= timeline.length - 1) stopPlayback();
+        else scheduleNext();
+      }, Number(speedSelect.value));
+    }
+
+    function startPlayback() {
+      if (isPlaying || currentStep >= timeline.length - 1) return;
+      isPlaying = true;
+      updateControls();
+      scheduleNext();
+    }
+
+    function stopPlayback() {
+      isPlaying = false;
+      if (timerId !== null) window.clearTimeout(timerId);
+      timerId = null;
+      updateControls();
+    }
+
+    function nextStep() {
+      if (isPlaying || currentStep >= timeline.length - 1) return;
+      currentStep += 1;
+      render(timeline[currentStep]);
+    }
+
+    function resetVisualization() {
+      stopPlayback();
+      currentStep = 0;
+      render(timeline[currentStep]);
+    }
+
+    function changeSelectedRoute() {
+      stopPlayback();
+      sourceKey = sourceSelect.value;
+      destinationKey = destinationSelect.value;
+      currentStep = 0;
+      updateEndpointClasses();
+      timeline = buildTimeline();
+      render(timeline[currentStep]);
+    }
+
+    startButton.addEventListener("click", startPlayback);
+    stopButton.addEventListener("click", stopPlayback);
+    stepButton.addEventListener("click", nextStep);
+    resetButton.addEventListener("click", resetVisualization);
+    speedSelect.addEventListener("change", () => {
+      if (!isPlaying) return;
+      if (timerId !== null) window.clearTimeout(timerId);
+      scheduleNext();
+    });
+    sourceSelect.addEventListener("change", changeSelectedRoute);
+    destinationSelect.addEventListener("change", changeSelectedRoute);
+
+    buildGrid();
+    populateCitySelectors();
+    updateEndpointClasses();
+    timeline = buildTimeline();
+    render(timeline[currentStep]);
+  </script>
+</body>
+</html>

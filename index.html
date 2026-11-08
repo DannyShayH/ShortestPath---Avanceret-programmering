@@ -1,0 +1,1143 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dijkstras algoritme – trin for trin</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --panel: rgba(15, 29, 48, 0.92);
+      --panel-2: #13243a;
+      --border: #2b405b;
+      --text: #f5f8fc;
+      --muted: #a9bad0;
+      --unknown: #607087;
+      --frontier: #f6c453;
+      --current: #ff8a4c;
+      --visited: #37c995;
+      --path: #bd8cff;
+      --road: #49617e;
+      --road-seen: #6da6c8;
+      --focus: #8ec5ff;
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% 0%, rgba(66, 120, 168, 0.22), transparent 34rem),
+        radial-gradient(circle at 95% 40%, rgba(104, 70, 170, 0.15), transparent 30rem),
+        var(--bg);
+    }
+
+    button, select { font: inherit; }
+
+    .page {
+      width: min(1500px, 100%);
+      margin: 0 auto;
+      padding: 32px clamp(16px, 3vw, 44px) 44px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: #8ec5ff;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 850px;
+      font-size: clamp(2rem, 4vw, 4rem);
+      line-height: 1.03;
+      letter-spacing: -0.045em;
+    }
+
+    .lead {
+      margin: 14px 0 0;
+      max-width: 790px;
+      color: var(--muted);
+      font-size: clamp(1rem, 1.4vw, 1.15rem);
+      line-height: 1.65;
+    }
+
+    .algorithm-pill {
+      max-width: 330px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      color: var(--muted);
+      background: rgba(14, 29, 48, 0.75);
+      line-height: 1.5;
+    }
+
+    .algorithm-pill strong { color: var(--text); }
+
+    .learning-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .learning-card {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 11px;
+      align-items: center;
+      padding: 13px 15px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(14, 29, 48, 0.68);
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    .learning-card span {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      color: #07111f;
+      background: #8ec5ff;
+      font-weight: 900;
+    }
+
+    .learning-card strong { color: var(--text); }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.75fr) minmax(320px, 0.75fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .map-panel { min-width: 0; }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(8, 20, 35, 0.7);
+    }
+
+    .button {
+      min-height: 42px;
+      padding: 0 16px;
+      border: 1px solid #49627f;
+      border-radius: 10px;
+      color: var(--text);
+      background: #1a304b;
+      cursor: pointer;
+      font-weight: 750;
+      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+    }
+
+    .button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      border-color: #8ec5ff;
+      background: #203b5c;
+    }
+
+    .button:focus-visible, select:focus-visible {
+      outline: 3px solid rgba(142, 197, 255, 0.42);
+      outline-offset: 2px;
+    }
+
+    .button.primary {
+      color: #07111f;
+      border-color: #8ec5ff;
+      background: #8ec5ff;
+    }
+
+    .button.stop {
+      border-color: #9b5d4f;
+      background: #4b2927;
+    }
+
+    .button:disabled {
+      opacity: 0.42;
+      cursor: not-allowed;
+    }
+
+    .speed-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    select {
+      min-height: 40px;
+      padding: 0 30px 0 10px;
+      border: 1px solid #49627f;
+      border-radius: 9px;
+      color: var(--text);
+      background: #142942;
+    }
+
+    .status-banner {
+      min-height: 104px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(100deg, rgba(142, 197, 255, 0.11), transparent 70%);
+    }
+
+    .status-kicker {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      color: #8ec5ff;
+      font-size: 0.75rem;
+      font-weight: 850;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .status-title {
+      margin: 0 0 4px;
+      font-size: clamp(1.05rem, 2vw, 1.35rem);
+    }
+
+    .status-copy {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.48;
+    }
+
+    .map-scroll {
+      overflow-x: auto;
+      background:
+        linear-gradient(rgba(87, 111, 139, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(87, 111, 139, 0.08) 1px, transparent 1px),
+        #0a1728;
+      background-size: 40px 40px;
+    }
+
+    .graph {
+      position: relative;
+      width: 100%;
+      min-width: 820px;
+      aspect-ratio: 5 / 3;
+      min-height: 500px;
+    }
+
+    .roads {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .road {
+      stroke: var(--road);
+      stroke-width: 3;
+      fill: none;
+      opacity: 0.72;
+      transition: stroke 220ms ease, stroke-width 220ms ease, opacity 220ms ease;
+    }
+
+    .road.seen {
+      stroke: var(--road-seen);
+      opacity: 0.9;
+    }
+
+    .road.active {
+      stroke: var(--current);
+      stroke-width: 6;
+      opacity: 1;
+      filter: drop-shadow(0 0 5px rgba(255, 138, 76, 0.75));
+    }
+
+    .road.path {
+      stroke: var(--path);
+      stroke-width: 7;
+      opacity: 1;
+      filter: drop-shadow(0 0 6px rgba(189, 140, 255, 0.7));
+    }
+
+    .road-label {
+      fill: #dce8f6;
+      font-size: 17px;
+      font-weight: 900;
+      text-anchor: middle;
+      dominant-baseline: central;
+      paint-order: stroke;
+      stroke: #0a1728;
+      stroke-width: 7px;
+      stroke-linejoin: round;
+    }
+
+    .cityNode {
+      position: absolute;
+      width: 122px;
+      min-height: 91px;
+      padding: 7px 8px 8px;
+      border: 2px solid var(--unknown);
+      border-radius: 15px;
+      color: #e8eef6;
+      background: #17263a;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34);
+      transform: translate(-50%, -50%);
+      transition: border-color 220ms ease, background 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+      z-index: 2;
+    }
+
+    .cityNode.frontier {
+      border-color: var(--frontier);
+      background: #3d3520;
+      box-shadow: 0 0 0 4px rgba(246, 196, 83, 0.14), 0 10px 24px rgba(0, 0, 0, 0.34);
+    }
+
+    .cityNode.current {
+      border-color: var(--current);
+      background: #472a25;
+      box-shadow: 0 0 0 5px rgba(255, 138, 76, 0.17), 0 0 28px rgba(255, 138, 76, 0.3);
+      transform: translate(-50%, -50%) scale(1.06);
+      z-index: 3;
+    }
+
+    .cityNode.visited {
+      border-color: var(--visited);
+      background: #15382f;
+    }
+
+    .cityNode.visited.current {
+      border-color: var(--current);
+      background: #472a25;
+    }
+
+    .cityNode.path {
+      border-color: var(--path);
+      background: #34264d;
+      box-shadow: 0 0 0 4px rgba(189, 140, 255, 0.18), 0 0 26px rgba(189, 140, 255, 0.28);
+      z-index: 3;
+    }
+
+    .cityNode-top {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      height: 35px;
+      gap: 3px;
+      color: var(--unknown);
+      transition: color 220ms ease;
+    }
+
+    .frontier .cityNode-top { color: var(--frontier); }
+    .current .cityNode-top { color: var(--current); }
+    .visited .cityNode-top { color: var(--visited); }
+    .visited.current .cityNode-top { color: var(--current); }
+    .path .cityNode-top { color: var(--path); }
+
+    .building {
+      position: relative;
+      width: 17px;
+      height: 25px;
+      border-radius: 2px 2px 0 0;
+      background: currentColor;
+    }
+
+    .building::after {
+      content: "";
+      position: absolute;
+      inset: 5px 4px;
+      background: repeating-linear-gradient(to bottom, #17263a 0 3px, transparent 3px 7px);
+      opacity: 0.75;
+    }
+
+    .building:nth-child(1) { height: 20px; }
+    .building:nth-child(2) { height: 33px; width: 21px; }
+    .building:nth-child(3) { height: 24px; }
+
+    .cityNode-name {
+      display: block;
+      overflow: hidden;
+      margin-top: 2px;
+      font-size: 0.78rem;
+      font-weight: 850;
+      text-align: center;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .cityNode-distance {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.69rem;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      padding: 13px 17px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      background: #0b1a2c;
+      font-size: 0.82rem;
+    }
+
+    .legend-item { display: flex; align-items: center; gap: 7px; }
+
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border: 2px solid currentColor;
+      border-radius: 4px;
+      background: color-mix(in srgb, currentColor 22%, transparent);
+    }
+
+    .swatch.unknown { color: var(--unknown); }
+    .swatch.frontier { color: var(--frontier); }
+    .swatch.current { color: var(--current); }
+    .swatch.visited { color: var(--visited); }
+    .swatch.path { color: var(--path); }
+
+    .data-panel {
+      display: grid;
+      grid-template-rows: auto auto minmax(220px, 1fr);
+      min-height: 0;
+    }
+
+    .data-section {
+      padding: 17px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .data-section:last-child { border-bottom: 0; }
+
+    .section-heading {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin: 0 0 11px;
+      font-size: 0.95rem;
+    }
+
+    .section-heading small {
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .queue-list {
+      display: grid;
+      gap: 7px;
+      min-height: 38px;
+    }
+
+    .queue-item {
+      display: grid;
+      grid-template-columns: 27px 1fr auto;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 10px;
+      border: 1px solid #4b4939;
+      border-radius: 9px;
+      background: #2f2b1e;
+    }
+
+    .queue-rank {
+      display: grid;
+      place-items: center;
+      width: 25px;
+      height: 25px;
+      border-radius: 50%;
+      color: #171203;
+      background: var(--frontier);
+      font-size: 0.74rem;
+      font-weight: 900;
+    }
+
+    .queue-item strong { font-size: 0.88rem; }
+    .queue-item b { color: var(--frontier); }
+
+    .empty-state {
+      padding: 8px 0;
+      color: var(--muted);
+      font-size: 0.86rem;
+      font-style: italic;
+    }
+
+    .visited-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      min-height: 33px;
+    }
+
+    .visited-chip {
+      padding: 6px 9px;
+      border: 1px solid rgba(55, 201, 149, 0.48);
+      border-radius: 999px;
+      color: #9bf0cf;
+      background: rgba(55, 201, 149, 0.1);
+      font-size: 0.78rem;
+      font-weight: 750;
+    }
+
+    .log-section {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      padding: 17px;
+    }
+
+    .event-log {
+      flex: 1;
+      min-height: 260px;
+      max-height: 470px;
+      margin: 0;
+      padding: 6px 4px 6px 0;
+      overflow-y: auto;
+      list-style: none;
+      counter-reset: log;
+    }
+
+    .event-log li {
+      position: relative;
+      margin-left: 18px;
+      padding: 0 0 13px 18px;
+      border-left: 1px solid #38506d;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .event-log li::before {
+      content: "";
+      position: absolute;
+      top: 4px;
+      left: -5px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #5f7896;
+    }
+
+    .event-log li:last-child {
+      color: var(--text);
+      border-left-color: transparent;
+    }
+
+    .event-log li:last-child::before {
+      background: var(--current);
+      box-shadow: 0 0 0 4px rgba(255, 138, 76, 0.14);
+    }
+
+    .result-card {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid rgba(189, 140, 255, 0.55);
+      border-radius: 11px;
+      background: rgba(189, 140, 255, 0.1);
+      line-height: 1.5;
+    }
+
+    .result-card.visible { display: block; }
+    .result-card strong { color: #dbc1ff; }
+
+    @media (max-width: 1100px) {
+      header { grid-template-columns: 1fr; }
+      .algorithm-pill { max-width: none; }
+      .workspace { grid-template-columns: 1fr; }
+      .data-panel { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; }
+      .log-section { grid-column: 1 / -1; }
+      .event-log { max-height: 300px; }
+    }
+
+    @media (max-width: 700px) {
+      .page { padding-inline: 12px; }
+      .learning-strip { grid-template-columns: 1fr; }
+      .controls { align-items: stretch; }
+      .button { flex: 1 1 calc(50% - 8px); }
+      .speed-control { width: 100%; margin-left: 0; justify-content: space-between; }
+      .data-panel { grid-template-columns: 1fr; }
+      .log-section { grid-column: auto; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <div>
+        <p class="eyebrow">Korteste vej · interaktiv visualisering</p>
+        <h1>Sådan finder Dijkstra den korteste vej</h1>
+        <p class="lead">Følg algoritmen, mens den undersøger byerne. Du kan stoppe når som helst, gå ét trin frem og se, hvorfor en afstand bliver ændret.</p>
+      </div>
+      <aside class="algorithm-pill">
+        <strong>Den vigtigste regel:</strong> Dijkstra vælger altid den ubesøgte by med den korteste kendte afstand.
+      </aside>
+    </header>
+
+    <section class="learning-strip" aria-label="Dijkstras tre grundtrin">
+      <div class="learning-card"><span>1</span><div><strong>Vælg den nærmeste</strong><br>i køen.</div></div>
+      <div class="learning-card"><span>2</span><div><strong>Undersøg vejene</strong><br>til naboerne.</div></div>
+      <div class="learning-card"><span>3</span><div><strong>Lås byen</strong><br>når den er besøgt.</div></div>
+    </section>
+
+    <section class="workspace">
+      <div class="panel map-panel">
+        <div class="controls" aria-label="Afspilningsknapper">
+          <button class="button primary" id="startButton" type="button">▶ Start</button>
+          <button class="button stop" id="stopButton" type="button" disabled>■ Stop</button>
+          <button class="button" id="stepButton" type="button">Næste trin →</button>
+          <button class="button" id="resetButton" type="button">↺ Nulstil</button>
+          <label class="speed-control" for="speedSelect">
+            Hastighed
+            <select id="speedSelect">
+              <option value="1800">Langsom</option>
+              <option value="1100" selected>Normal</option>
+              <option value="550">Hurtig</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="status-banner" aria-live="polite" aria-atomic="true">
+          <div class="status-kicker"><span class="pulse-dot"></span><span id="stepCounter">Klar</span></div>
+          <h2 class="status-title" id="statusTitle">Start ved Start</h2>
+          <p class="status-copy" id="statusCopy">Startbyen har afstand 0. Alle andre afstande er endnu ukendte.</p>
+        </div>
+
+        <div class="map-scroll">
+          <div class="graph" id="graph" aria-label="Kort over byer og rettede veje">
+            <svg class="roads" id="roads" viewBox="0 0 1000 600" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <marker id="arrow-default" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="strokeWidth">
+                  <path d="M 0 0 L 9 4.5 L 0 9 z" fill="#49617e"></path>
+                </marker>
+                <marker id="arrow-seen" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="strokeWidth">
+                  <path d="M 0 0 L 9 4.5 L 0 9 z" fill="#6da6c8"></path>
+                </marker>
+                <marker id="arrow-active" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="strokeWidth">
+                  <path d="M 0 0 L 9 4.5 L 0 9 z" fill="#ff8a4c"></path>
+                </marker>
+                <marker id="arrow-path" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="strokeWidth">
+                  <path d="M 0 0 L 9 4.5 L 0 9 z" fill="#bd8cff"></path>
+                </marker>
+              </defs>
+            </svg>
+          </div>
+        </div>
+
+        <div class="legend" aria-label="Farveforklaring">
+          <span class="legend-item"><i class="swatch unknown"></i>Ikke fundet</span>
+          <span class="legend-item"><i class="swatch frontier"></i>Fundet / i kø</span>
+          <span class="legend-item"><i class="swatch current"></i>Undersøges nu</span>
+          <span class="legend-item"><i class="swatch visited"></i>Besøgt / låst</span>
+          <span class="legend-item"><i class="swatch path"></i>Korteste vej</span>
+        </div>
+      </div>
+
+      <aside class="panel data-panel">
+        <section class="data-section">
+          <h2 class="section-heading">Prioritetskøen <small>korteste først</small></h2>
+          <div class="queue-list" id="queueList"></div>
+        </section>
+
+        <section class="data-section">
+          <h2 class="section-heading">Besøgte byer <small>afstanden er låst</small></h2>
+          <div class="visited-list" id="visitedList"></div>
+        </section>
+
+        <section class="log-section">
+          <h2 class="section-heading">Hvad er der sket? <small>print-log</small></h2>
+          <ol class="event-log" id="eventLog" aria-live="polite"></ol>
+          <div class="result-card" id="resultCard"></div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    "use strict";
+
+    const cities = [
+      { id: "start", name: "Start", x: 75, y: 300 },
+      { id: "helsinge", name: "Helsinge", x: 220, y: 110 },
+      { id: "duemose", name: "Duemose", x: 220, y: 300 },
+      { id: "slotspavillionen", name: "Slotspavillionen", x: 220, y: 500 },
+      { id: "hilleroed", name: "Hillerød", x: 370, y: 180 },
+      { id: "lilleroed", name: "Lillerød", x: 510, y: 180 },
+      { id: "holte", name: "Holte", x: 620, y: 335 },
+      { id: "lyngby", name: "Lyngby", x: 735, y: 90 },
+      { id: "noerreport", name: "Nørreport", x: 870, y: 185 },
+      { id: "maal", name: "Mål", x: 920, y: 455 }
+    ];
+
+    const edges = [
+      { from: "start", to: "helsinge", weight: 1, curve: -12 },
+      { from: "start", to: "duemose", weight: 5 },
+      { from: "start", to: "slotspavillionen", weight: 2, curve: 12 },
+      { from: "helsinge", to: "hilleroed", weight: 3, curve: -18 },
+      { from: "duemose", to: "hilleroed", weight: 2, curve: 24, labelOffset: 17 },
+      { from: "slotspavillionen", to: "hilleroed", weight: 1, curve: 40 },
+      { from: "hilleroed", to: "lilleroed", weight: 1, curve: -22 },
+      { from: "lilleroed", to: "holte", weight: 3, curve: 18 },
+      { from: "lilleroed", to: "lyngby", weight: 2, curve: -52 },
+      { from: "holte", to: "lyngby", weight: 5, curve: 28, labelOffset: 17 },
+      { from: "holte", to: "noerreport", weight: 4, curve: 42, labelOffset: 18 },
+      { from: "lyngby", to: "noerreport", weight: 3, curve: -28 },
+      { from: "lyngby", to: "maal", weight: 7, controlX: 1000, controlY: 60, labelOffset: 18 },
+      { from: "holte", to: "maal", weight: 10, curve: 38, labelOffset: 19 },
+      { from: "noerreport", to: "maal", weight: 1, curve: -24 }
+    ];
+
+    const cityById = Object.fromEntries(cities.map(cityNode => [cityNode.id, cityNode]));
+    const outgoing = Object.fromEntries(cities.map(cityNode => [cityNode.id, []]));
+    edges.forEach(edge => outgoing[edge.from].push(edge));
+    const edgeKey = edge => `${edge.from}->${edge.to}`;
+
+    const graph = document.getElementById("graph");
+    const roadsSvg = document.getElementById("roads");
+    const startButton = document.getElementById("startButton");
+    const stopButton = document.getElementById("stopButton");
+    const stepButton = document.getElementById("stepButton");
+    const resetButton = document.getElementById("resetButton");
+    const speedSelect = document.getElementById("speedSelect");
+    const statusTitle = document.getElementById("statusTitle");
+    const statusCopy = document.getElementById("statusCopy");
+    const stepCounter = document.getElementById("stepCounter");
+    const queueList = document.getElementById("queueList");
+    const visitedList = document.getElementById("visitedList");
+    const eventLog = document.getElementById("eventLog");
+    const resultCard = document.getElementById("resultCard");
+
+    function curvedRoad(from, to, edge = {}, startRadius = 69, endRadius = 76) {
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const length = Math.hypot(dx, dy);
+      const normalX = -dy / length;
+      const normalY = dx / length;
+      const curve = edge.curve || 0;
+      const control = Number.isFinite(edge.controlX) && Number.isFinite(edge.controlY)
+        ? { x: edge.controlX, y: edge.controlY }
+        : {
+            x: (from.x + to.x) / 2 + normalX * curve,
+            y: (from.y + to.y) / 2 + normalY * curve
+          };
+
+      const startLength = Math.hypot(control.x - from.x, control.y - from.y);
+      const endLength = Math.hypot(to.x - control.x, to.y - control.y);
+      const start = {
+        x: from.x + ((control.x - from.x) / startLength) * startRadius,
+        y: from.y + ((control.y - from.y) / startLength) * startRadius
+      };
+      const end = {
+        x: to.x - ((to.x - control.x) / endLength) * endRadius,
+        y: to.y - ((to.y - control.y) / endLength) * endRadius
+      };
+
+      return {
+        start,
+        control,
+        end
+      };
+    }
+
+    function pointAndNormalOnCurve(road, position = 0.5) {
+      const inverse = 1 - position;
+      const x = inverse * inverse * road.start.x
+        + 2 * inverse * position * road.control.x
+        + position * position * road.end.x;
+      const y = inverse * inverse * road.start.y
+        + 2 * inverse * position * road.control.y
+        + position * position * road.end.y;
+      const tangentX = 2 * inverse * (road.control.x - road.start.x)
+        + 2 * position * (road.end.x - road.control.x);
+      const tangentY = 2 * inverse * (road.control.y - road.start.y)
+        + 2 * position * (road.end.y - road.control.y);
+      const tangentLength = Math.hypot(tangentX, tangentY);
+
+      return {
+        x,
+        y,
+        normalX: -tangentY / tangentLength,
+        normalY: tangentX / tangentLength
+      };
+    }
+
+    function buildGraph() {
+      const svgNamespace = "http://www.w3.org/2000/svg";
+
+      edges.forEach(edge => {
+        const from = cityById[edge.from];
+        const to = cityById[edge.to];
+        const road = curvedRoad(from, to, edge);
+        const group = document.createElementNS(svgNamespace, "g");
+        group.dataset.edge = edgeKey(edge);
+
+        const path = document.createElementNS(svgNamespace, "path");
+        path.setAttribute(
+          "d",
+          `M ${road.start.x} ${road.start.y} Q ${road.control.x} ${road.control.y} ${road.end.x} ${road.end.y}`
+        );
+        path.setAttribute("marker-end", "url(#arrow-default)");
+        path.classList.add("road");
+
+        const label = document.createElementNS(svgNamespace, "text");
+        const labelPoint = pointAndNormalOnCurve(road);
+        const labelOffset = edge.labelOffset ?? -16;
+        label.setAttribute("x", labelPoint.x + labelPoint.normalX * labelOffset);
+        label.setAttribute("y", labelPoint.y + labelPoint.normalY * labelOffset);
+        label.classList.add("road-label");
+        label.textContent = edge.weight;
+
+        group.append(path, label);
+        roadsSvg.appendChild(group);
+      });
+
+      cities.forEach(cityNode => {
+        const element = document.createElement("div");
+        element.className = "cityNode";
+        element.dataset.cityNode = cityNode.id;
+        element.style.left = `${cityNode.x / 10}%`;
+        element.style.top = `${cityNode.y / 6}%`;
+        element.innerHTML = `
+          <div class="cityNode-top" aria-hidden="true">
+            <i class="building"></i><i class="building"></i><i class="building"></i>
+          </div>
+          <strong class="cityNode-name" title="${cityNode.name}">${cityNode.name}</strong>
+          <span class="cityNode-distance">Afstand: ∞</span>
+        `;
+        graph.appendChild(element);
+      });
+    }
+
+    function buildTimeline() {
+      const steps = [];
+      const distances = Object.fromEntries(cities.map(cityNode => [cityNode.id, Infinity]));
+      const previous = {};
+      const visited = [];
+      const visitedSet = new Set();
+      const queue = [];
+      const examinedEdges = new Set();
+      const logs = [];
+      let sequence = 0;
+
+      const sortedQueue = () => [...queue].sort((a, b) => a.distance - b.distance || a.sequence - b.sequence);
+
+      function addOrImproveQueue(cityId, distance) {
+        const oldIndex = queue.findIndex(item => item.cityId === cityId);
+        if (oldIndex !== -1) queue.splice(oldIndex, 1);
+        queue.push({ cityId, distance, sequence: sequence++ });
+      }
+
+      function addStep(title, copy, options = {}) {
+        if (options.log) logs.push(options.log);
+        steps.push({
+          title,
+          copy,
+          distances: { ...distances },
+          previous: { ...previous },
+          visited: [...visited],
+          queue: sortedQueue(),
+          examinedEdges: [...examinedEdges],
+          currentCity: options.currentCity || null,
+          activeEdge: options.activeEdge || null,
+          logs: [...logs],
+          finalPath: options.finalPath || null,
+          complete: Boolean(options.complete)
+        });
+      }
+
+      distances.start = 0;
+      addOrImproveQueue("start", 0);
+      addStep(
+        "Start ved Start",
+        "Startbyen har afstand 0. Alle andre afstande er endnu ukendte.",
+        { log: "Start lægges i køen med afstand 0." }
+      );
+
+      while (queue.length > 0) {
+        queue.sort((a, b) => a.distance - b.distance || a.sequence - b.sequence);
+        const current = queue.shift();
+        if (visitedSet.has(current.cityId)) continue;
+        const currentName = cityById[current.cityId].name;
+
+        addStep(
+          `Vælg ${currentName}`,
+          `${currentName} har den korteste afstand i køen (${current.distance}), så den undersøges nu.`,
+          { currentCity: current.cityId, log: `${currentName} tages ud af køen med afstand ${current.distance}.` }
+        );
+
+        visitedSet.add(current.cityId);
+        visited.push(current.cityId);
+        addStep(
+          `${currentName} er nu besøgt`,
+          `Afstanden ${current.distance} er nu låst. Dijkstra finder ikke senere en kortere vej til ${currentName}.`,
+          { log: `${currentName} markeres som besøgt.` }
+        );
+
+        if (current.cityId === "maal") break;
+
+        const roads = outgoing[current.cityId];
+        if (roads.length === 0) {
+          addStep(
+            `${currentName} er en blind vej`,
+            "Der går ingen veje videre herfra. Algoritmen fortsætter med den næste by i køen.",
+            { log: `${currentName} har ingen udgående veje.` }
+          );
+        }
+
+        for (const edge of roads) {
+          if (visitedSet.has(edge.to)) continue;
+          const nextName = cityById[edge.to].name;
+          const candidate = distances[current.cityId] + edge.weight;
+          examinedEdges.add(edgeKey(edge));
+
+          addStep(
+            `Undersøg vejen til ${nextName}`,
+            `${distances[current.cityId]} + ${edge.weight} = ${candidate}. Det er afstanden til ${nextName} gennem ${currentName}.`,
+            {
+              currentCity: current.cityId,
+              activeEdge: edgeKey(edge),
+              log: `Vejen ${currentName} → ${nextName} undersøges: ${distances[current.cityId]} + ${edge.weight} = ${candidate}.`
+            }
+          );
+
+          if (candidate < distances[edge.to]) {
+            const oldDistance = distances[edge.to];
+            distances[edge.to] = candidate;
+            previous[edge.to] = current.cityId;
+            addOrImproveQueue(edge.to, candidate);
+            const oldText = Number.isFinite(oldDistance) ? oldDistance : "∞";
+            addStep(
+              `Ny bedste afstand til ${nextName}`,
+              `${candidate} er kortere end ${oldText}. ${nextName} lægges i køen med den nye afstand.`,
+              {
+                currentCity: current.cityId,
+                activeEdge: edgeKey(edge),
+                log: `Afstanden til ${nextName} er nu ${candidate} (via ${currentName}).`
+              }
+            );
+          } else {
+            addStep(
+              `Behold afstanden til ${nextName}`,
+              `${candidate} er ikke kortere end den kendte afstand ${distances[edge.to]}, så intet ændres.`,
+              {
+                currentCity: current.cityId,
+                activeEdge: edgeKey(edge),
+                log: `Ruten til ${nextName} via ${currentName} er ikke kortere; afstanden forbliver ${distances[edge.to]}.`
+              }
+            );
+          }
+        }
+      }
+
+      const finalPath = [];
+      let cursor = "maal";
+      while (cursor) {
+        finalPath.unshift(cursor);
+        cursor = previous[cursor];
+      }
+      const names = finalPath.map(id => cityById[id].name).join(" → ");
+      addStep(
+        "Den korteste vej er fundet!",
+        `Mål er besøgt, så afstanden ${distances.maal} er endelig. Den lilla rute er den korteste vej.`,
+        {
+          finalPath,
+          complete: true,
+          log: `Korteste vej: ${names}. Samlet afstand: ${distances.maal}.`
+        }
+      );
+
+      return steps;
+    }
+
+    function pathEdgeKeys(path) {
+      const keys = new Set();
+      if (!path) return keys;
+      for (let index = 0; index < path.length - 1; index += 1) {
+        keys.add(`${path[index]}->${path[index + 1]}`);
+      }
+      return keys;
+    }
+
+    function render(step) {
+      statusTitle.textContent = step.title;
+      statusCopy.textContent = step.copy;
+      stepCounter.textContent = step.complete ? "Færdig" : `Trin ${currentStep + 1} af ${timeline.length}`;
+
+      const visitedSet = new Set(step.visited);
+      const frontierSet = new Set(step.queue.map(item => item.cityId));
+      const finalPathSet = new Set(step.finalPath || []);
+
+      document.querySelectorAll(".cityNode").forEach(element => {
+        const cityId = element.dataset.cityNode;
+        element.classList.toggle("frontier", frontierSet.has(cityId));
+        element.classList.toggle("visited", visitedSet.has(cityId));
+        element.classList.toggle("current", step.currentCity === cityId);
+        element.classList.toggle("path", finalPathSet.has(cityId));
+        const distance = step.distances[cityId];
+        element.querySelector(".cityNode-distance").textContent = `Afstand: ${Number.isFinite(distance) ? distance : "∞"}`;
+      });
+
+      const seenEdges = new Set(step.examinedEdges);
+      const finalEdges = pathEdgeKeys(step.finalPath);
+      document.querySelectorAll("[data-edge]").forEach(group => {
+        const key = group.dataset.edge;
+        const line = group.querySelector(".road");
+        const isPath = finalEdges.has(key);
+        const isActive = step.activeEdge === key;
+        line.classList.toggle("seen", seenEdges.has(key));
+        line.classList.toggle("active", isActive);
+        line.classList.toggle("path", isPath);
+        const marker = isPath ? "path" : isActive ? "active" : seenEdges.has(key) ? "seen" : "default";
+        line.setAttribute("marker-end", `url(#arrow-${marker})`);
+      });
+
+      if (step.queue.length === 0) {
+        queueList.innerHTML = '<div class="empty-state">Køen er tom.</div>';
+      } else {
+        queueList.innerHTML = step.queue.map((item, index) => `
+          <div class="queue-item">
+            <span class="queue-rank">${index + 1}</span>
+            <strong>${cityById[item.cityId].name}</strong>
+            <b>${item.distance}</b>
+          </div>
+        `).join("");
+      }
+
+      if (step.visited.length === 0) {
+        visitedList.innerHTML = '<span class="empty-state">Ingen byer er besøgt endnu.</span>';
+      } else {
+        visitedList.innerHTML = step.visited.map(id => `<span class="visited-chip">✓ ${cityById[id].name}</span>`).join("");
+      }
+
+      eventLog.innerHTML = step.logs.map(log => `<li>${log}</li>`).join("");
+      eventLog.scrollTop = eventLog.scrollHeight;
+
+      if (step.complete) {
+        const route = step.finalPath.map(id => cityById[id].name).join(" → ");
+        resultCard.innerHTML = `<strong>Resultat: ${step.distances.maal}</strong><br>${route}`;
+        resultCard.classList.add("visible");
+      } else {
+        resultCard.classList.remove("visible");
+        resultCard.innerHTML = "";
+      }
+
+      updateControls();
+    }
+
+    let timeline;
+    let currentStep = 0;
+    let timerId = null;
+    let isPlaying = false;
+
+    function updateControls() {
+      const complete = currentStep >= timeline.length - 1;
+      startButton.disabled = isPlaying || complete;
+      stopButton.disabled = !isPlaying;
+      stepButton.disabled = isPlaying || complete;
+      resetButton.disabled = currentStep === 0 && !isPlaying;
+    }
+
+    function scheduleNext() {
+      if (!isPlaying) return;
+      timerId = window.setTimeout(() => {
+        if (currentStep < timeline.length - 1) {
+          currentStep += 1;
+          render(timeline[currentStep]);
+        }
+        if (currentStep >= timeline.length - 1) {
+          stopPlayback();
+        } else {
+          scheduleNext();
+        }
+      }, Number(speedSelect.value));
+    }
+
+    function startPlayback() {
+      if (isPlaying || currentStep >= timeline.length - 1) return;
+      isPlaying = true;
+      updateControls();
+      scheduleNext();
+    }
+
+    function stopPlayback() {
+      isPlaying = false;
+      if (timerId !== null) window.clearTimeout(timerId);
+      timerId = null;
+      updateControls();
+    }
+
+    function nextStep() {
+      if (isPlaying || currentStep >= timeline.length - 1) return;
+      currentStep += 1;
+      render(timeline[currentStep]);
+    }
+
+    function resetVisualization() {
+      stopPlayback();
+      currentStep = 0;
+      render(timeline[currentStep]);
+    }
+
+    startButton.addEventListener("click", startPlayback);
+    stopButton.addEventListener("click", stopPlayback);
+    stepButton.addEventListener("click", nextStep);
+    resetButton.addEventListener("click", resetVisualization);
+    speedSelect.addEventListener("change", () => {
+      if (isPlaying) {
+        if (timerId !== null) window.clearTimeout(timerId);
+        scheduleNext();
+      }
+    });
+
+    buildGraph();
+    timeline = buildTimeline();
+    render(timeline[currentStep]);
+  </script>
+</body>
+</html>
